@@ -1,15 +1,13 @@
-from __future__ import print_function
-
-import hid
+from pydualsense import *
 import time
-import os
-import itertools
 from tkinter import * 
 from tkinter.ttk import *
 import json 
 import random
 import colorsys
 import gc
+
+import autopy
 
 class PixelObject: 
   def __init__(self, x, y, w, h, color):
@@ -160,15 +158,6 @@ class ControllerPixelObject:
     self.hex_color_inactive = hex_color
     self.hsv_color_inactive = hsv_color
 
-
-class CombObj:
-    pass
-
-class BoolButton:
-  def __init__(self, int_val, bool_val):
-      self.int_val = 0
-      self.bool_val = False
-
 class App:
   def __init__(self):
     self.controller_pixel_object = ControllerPixelObject(17, 17)
@@ -184,6 +173,9 @@ class App:
 
     self.tk_root.protocol("WM_DELETE_WINDOW", self.end)
     # create dualsense
+    self.dualsense = pydualsense()
+    # find device and initialize
+    self.dualsense.init()
 
     self.trigger_modes = [
     "Off",
@@ -232,13 +224,19 @@ class App:
     self.tk_canvas = Canvas(self.tk_root, width=self.tk_root_w, height=self.tk_root_h)
     self.tk_canvas.pack()
 
+    self.reset_touchpad_autopy_mouse()
+
+    self.start()
+
   def end(self):
     #print(TriggerModes.__dict__)
     
 
     self.running = False
+    self.dualsense.close()
     self.tk_root.destroy()
     self.tk_root.quit()
+
 
   def render_canvas(self):
 
@@ -258,283 +256,155 @@ class App:
 
           self.tk_canvas.create_rectangle(x0, y0, x1, y1, fill=color)
 
-"""
-so 
-"""
-class Dualsense:
-    def __init__(self):
+  def reset_touchpad_autopy_mouse(self):
+      self.touch0_up = True
+      self.touch0_down_autopy_mouse_location = None
+      self.touch0_down_dualsense_state_trackpadtouch0_x = None
+      self.touch0_down_dualsense_state_trackpadtouch0_y = None
+      self.touch0_down_dualsense_state_trackpadtouch0_x_delta = None
+      self.touch0_down_dualsense_state_trackpadtouch0_y_delta = None
 
-        self.int_max = 255
+  def start(self):
+      try:
+        while self.running:
 
-        self.bool_d_pad_up = False
-        self.bool_d_pad_down = False
-        self.bool_d_pad_left = False
-        self.bool_d_pad_right = False
+            self.tk_canvas.delete("all")
+            #render canvas
+            self.render_canvas()
 
-        self.bool_d_triangle = False
-        self.bool_d_cross = False
-        self.bool_d_square = False
-        self.bool_d_circle = False
+            self.render_id = self.render_id + 1
+    
+            #print(dualsense.state.RY)
+            if(self.dualsense.state.R1):
 
-        self.bool_share = False
-        self.bool_options = False
+                print("move right stick up and down to change force on right rumble")
+                self.dualsense.setRightMotor((255-(127+self.dualsense.state.RY)))
 
-        self.bool_l3 = False
-        self.bool_r3 = False
+                print("move left stick up and down to change force on left rumble")
+                self.dualsense.setLeftMotor((255-(127+self.dualsense.state.LY)))
+            else: 
+                print("move right stick up and down to change force on right rumble")
+                self.dualsense.setRightMotor(0)
 
-        self.bool_l1 = False
-        self.bool_r1 = False
+                print("move left stick up and down to change force on left rumble")
+                self.dualsense.setLeftMotor(0)
 
-        self.bool_ps = False
-
-        self.bool_mic = False
-
-        self.int_analog_stick_left_axis_x = int(self.int_max/2)
-        self.int_analog_stick_left_axis_y = int(self.int_max/2)
-        self.int_analog_stick_right_axis_y = int(self.int_max/2)
-        self.int_analog_stick_right_axis_y = int(self.int_max/2)
-
-        self.int_trigger_l = int(self.int_max/2)
-        self.int_trigger_r = int(self.int_max/2)
-
-        self.bool_touchpad = False
-
-        self.int_touchpad_x = int(self.int_max/2)
-        self.int_touchpad_y = int(self.int_max/2)
-
-
-        self.int_l1 = BoolButton(1, False)
-        self.int_r1 = BoolButton(2, False)
-
-        self.int_l12_array = [self.int_l1, self.int_r1]
-
-        self.int_l12_combinations = self.get_comb_obj(self.int_l12_array)
-
-        
-
-        # now get the combinations
-
-
-    def get_comb_obj(self, array):
-        combos = self.get_combination_values(array)
-
-        for val in combos:
-            cmboj = CombObj()
-
-            sum_val = 0
-
-            for val2 in val:
-                sum_val = sum_val + val2.int_val
+            if(self.dualsense.state.cross):
+              self.trigger_mode_change_delta = time.time() - self.trigger_mode_last_change_ts
+              if(self.trigger_mode_change_delta > 0.1):
+                self.trigger_mode_last_change_ts = time.time()
+                self.trigger_mode_index = (self.trigger_mode_index + 1) % len(self.trigger_modes)
+                self.trigger_mode = self.trigger_modes[self.trigger_mode_index]
                 
-            #cmboj.settart("sum_val_"+sum_val, val)
-
-        return True
-
-    """
-    return a new array with all combinations
-    """
-    def get_combination_values(self,array):
-        comb = []
-        for i in range(len(array)):
-            comb += itertools.combinations(array,i+1)
-
-        return comb
 
 
-def draw_progress_bar(min, max, value, highlight = False):
-    width = 80
-    value_width = (value / max) * width
-    ostr = ""
-    # wtf c++ ... wtf -> 111/222 will return 0 , double(111)/222 will return 0.5... wtf
-    for i in range(width):
-        if (i == 0):
-            ostr  += ("[")
-        
-        if(i == width - 1):
-            ostr += ("]")
-            break
+            # self.progress_l['value'] =  (100/255)*(255-(127+self.dualsense.state.LY)) 
+            # self.progress_r['value'] =  (100/255)*(255-(127+self.dualsense.state.RY)) 
 
-        if (i < value_width):
-            ostr += ("=")
-        else:   
-            ostr += (" ")
-    
-    ostr += " : " + str(value).rjust(len(str(max))+1, ' ') +" / "+str(max)
+            self.dualsense.triggerR.setMode(TriggerModes[self.trigger_mode])
+            self.dualsense.triggerR.setForce(int(((128+self.dualsense.state.LY)/255)*6), 127+self.dualsense.state.RY)
 
-    ostr += " | binary : "+ '{0:08b}'.format(value) +" / " + '{0:08b}'.format(255)
-
-    if(highlight):
-        ostr = '\x1b[6;30;43m' + ostr + '\x1b[0m'
-
-    print(ostr)
-
-# enumerate USB devices
-
-for d in hid.enumerate():
-    keys = list(d.keys())
-    keys.sort()
-    for key in keys:
-        print("%s : %s" % (key, d[key]))
-    print()
-
-# try opening a device, then perform write and read
-
-try:
-
-    
-    print("Opening the device")
-    
-    app = App()
-
-    h = hid.device()
-    h.open(0x054c, 0x0CE6)  # TREZOR VendorID/ProductID
-
-    # interface_number : 3
-    # manufacturer_string : Sony Interactive Entertainment
-    # path : b'IOService:/AppleACPIPlatformExpert/PCI0@0/AppleACPIPCI/XHC1@14/XHC1@14000000/HS09@14400000/Wireless Controller@14400000/IOUSBHostInterface@3/IOUSBHostHIDDevice@14400000,3'
-    # product_id : 3302
-    # product_string : Wireless Controller
-    # release_number : 256
-    # serial_number : 
-    # usage : 5
-    # usage_page : 1
-    # vendor_id : 1356
-
-    print("Manufacturer: %s" % h.get_manufacturer_string())
-    print("Product: %s" % h.get_product_string())
-    #print("Serial No: %s" % h.get_serial_number_string())
-
-    dualsense = Dualsense()
-    print("Closing the device")
-
-    # enable non-blocking mode
-    h.set_nonblocking(1)
-
-    # write some data to the device
-    #print("Write the data")
-    #h.write([0, 63, 35, 35] + [0] * 61)
-
-    # wait
-    time.sleep(0.05)
-
-    # read back the answer
-    print("Read the data")
-
-    while True:
-        d = h.read(64)
-        if d:
-            print(d)
-        else:
-            break
-
-    try:
-        c = 0 
-        while c < 500:
-            c= c+1
-            print(c)
-            time.sleep(0.1)
-            d_len = 128
-            d = h.read(d_len)
-            d_slice_len = int(d_len / 2)
-            d_slice_min = int(d_slice_len * 1)
-            d_slice_max = int(d_slice_min + d_slice_len)
-            d_sliced = d[(d_slice_min):(d_slice_max)]
-
-            d_slice_min = 0
-            d_slice_max = 70
-            d_sliced = d[(d_slice_min):(d_slice_max)]
+            self.dualsense.triggerL.setMode(TriggerModes[self.trigger_mode])
+            self.dualsense.triggerL.setForce(int(((128+self.dualsense.state.LY)/255)*6), 127+self.dualsense.state.RY)
 
 
+            self.label_text.set("press x to change, trigger mode:"+str(self.trigger_mode))
+            self.tk_root.title("press x to change, trigger mode:"+str(self.trigger_mode)) 
 
-            os.system('cls' if os.name == 'nt' else 'clear')
-            print("output data of ["+str(d_slice_min)+":"+str(d_slice_max)+"]")
+            if(self.dualsense.state.triangle):
+                if((self.render_id)%10== 0):
+                    #self.dualsense.light.setColorI(random.randint(0,255),random.randint(0,255), random.randint(0,255))
+                    random_hsv = [(1/100)*random.randint(0,100),1,1]
+                    self.controller_pixel_object.set_active_and_inactive_color_by_hue(random_hsv[0])
+                    random_color = colorsys.hsv_to_rgb(random_hsv[0], random_hsv[1], random_hsv[2])
+                    #self.dualsense.light.setColorI(int(random_color[0]*255), int(random_color[1]*255), int(random_color[2]*255))
+                    self.dualsense.light.setColorI(int(random_color[0]*255), int(random_color[1]*255), int(random_color[2]*255))
+                    for obj in gc.get_objects():
+                      if isinstance(obj, PixelObject):
+                        obj.color = self.controller_pixel_object.hex_color_inactive
+              
+              #print(Brightness.__dict__)#{'_generate_next_value_': <function Flag._generate_next_value_ at 0x00000225991D83A0>, '__module__': 'pydualsense.enums', '__doc__': 'An enumeration.', '_member_names_': ['high', 'medium', 'low'], '_member_map_': {'high': <Brightness.high: 0>, 'medium': <Brightness.medium: 1>, 'low': <Brightness.low: 2>}, '_member_type_': <class 'int'>, '_value2member_map_': {0: <Brightness.high: 0>, 1: <Brightness.medium: 1>, 2: <Brightness.low: 2>}, 'high': <Brightness.high: 0>, 'medium': <Brightness.medium: 1>, 'low': <Brightness.low: 2>, '__new__': <function Enum.__new__ at 0x00000225991D5CA0>}
+            else:
+              if(self.odd_frame_ids(20)):
+                #autopy.mouse.move(200,200)
+                self.dualsense.light.setBrightness(Brightness.low)
+              else:
+                self.dualsense.light.setBrightness(Brightness.high)
 
-            rightthumbbuttons = d[8]
+            if(self.dualsense.state.L1):
+              self.controller_pixel_object.l1.color = self.controller_pixel_object.hex_color_active
+            else:
+              self.controller_pixel_object.l1.color = self.controller_pixel_object.hex_color_inactive
+
+
+            self.controller_pixel_object.rstick.x = self.controller_pixel_object.rstick._x + (1/127)*self.dualsense.state.RX
+            self.controller_pixel_object.rstick.y = self.controller_pixel_object.rstick._y + (1/127)*self.dualsense.state.RY
+
+            self.controller_pixel_object.lstick.x = self.controller_pixel_object.lstick._x + (1/127)*self.dualsense.state.LX
+            self.controller_pixel_object.lstick.y = self.controller_pixel_object.lstick._y + (1/127)*self.dualsense.state.LY            
             
-            state = (rightthumbbuttons & (1 << 7)) != 0
+            self.controller_pixel_object.lborder1.hsv_color[2] = ((self.controller_pixel_object.lborder1.hsv_color[2] + (((self.dualsense.leftMotor+1)/(255+1))*0.1) )) % 0.5 + 0.5
+            rgb_color = colorsys.hsv_to_rgb(self.controller_pixel_object.lborder1.hsv_color[0], self.controller_pixel_object.lborder1.hsv_color[1], self.controller_pixel_object.lborder1.hsv_color[2])
+            hex_color = ('#%02x%02x%02x'%(round(rgb_color[0]*255),round(rgb_color[1]*255),round(rgb_color[2]*255)))
+            self.controller_pixel_object.lborder1.color = hex_color
 
+            self.controller_pixel_object.rborder1.hsv_color[2] = ((self.controller_pixel_object.rborder1.hsv_color[2] + (((self.dualsense.rightMotor+1)/(255+1))*0.1) )) % 0.5 + 0.5
+            rgb_color = colorsys.hsv_to_rgb(self.controller_pixel_object.rborder1.hsv_color[0], self.controller_pixel_object.rborder1.hsv_color[1], self.controller_pixel_object.rborder1.hsv_color[2])
+            hex_color = ('#%02x%02x%02x'%(round(rgb_color[0]*255),round(rgb_color[1]*255),round(rgb_color[2]*255)))
+            self.controller_pixel_object.rborder1.color = hex_color
 
-            print("biwise operated ")
-            print(state)
+            if(self.dualsense.state.touchBtn):
+              autopy.mouse.click()
 
+            self.controller_pixel_object.touchpadfinger1.color = self.controller_pixel_object.hex_color_inactive
 
-            highlight_text = False
-            for i, val in enumerate(d_sliced):
-                if(i == 0):
-                    continue
-                if(i == 8):
-                    highlight_text = True
-                else:
-                    highlight_text = False
+            if(self.dualsense.state.trackPadTouch0.isActive == True):
+              self.controller_pixel_object.touchpadfinger1.color = self.controller_pixel_object.hex_color_active
+              if(self.touch0_down_autopy_mouse_location == None):
+                self.touch0_down_autopy_mouse_location = autopy.mouse.location() 
+                self.touch0_down_dualsense_state_trackpadtouch0_x = self.dualsense.state.trackPadTouch0.X
+                self.touch0_down_dualsense_state_trackpadtouch0_y = self.dualsense.state.trackPadTouch0.Y
+              else:
+                self.touch0_up = False
+                #trackpad has FullHD 1920 x 1080 :0
+                self.label2_text.set(str(self.dualsense.state.trackPadTouch0.X)+":"+str(self.dualsense.state.trackPadTouch0.Y))
+                
+                self.touch0_down_dualsense_state_trackpadtouch0_x_delta = self.touch0_down_dualsense_state_trackpadtouch0_x - self.dualsense.state.trackPadTouch0.X
+                self.touch0_down_dualsense_state_trackpadtouch0_y_delta = self.touch0_down_dualsense_state_trackpadtouch0_y - self.dualsense.state.trackPadTouch0.Y
+                mouse_move_sensitivity = 0.5
+                autopy.mouse.move(self.touch0_down_autopy_mouse_location[0]-(self.touch0_down_dualsense_state_trackpadtouch0_x_delta*mouse_move_sensitivity),self.touch0_down_autopy_mouse_location[1]-(self.touch0_down_dualsense_state_trackpadtouch0_y_delta*mouse_move_sensitivity))
 
-                print("["+str(i).rjust(3, ' ')+"]", end="")
+                finger_x = ((self.controller_pixel_object.touchpad.w-1) / 1920) * self.dualsense.state.trackPadTouch0.X
+                finger_y = ((self.controller_pixel_object.touchpad.h-1) / 1080) * self.dualsense.state.trackPadTouch0.Y
+                
+                self.controller_pixel_object.touchpadfinger1.x = self.controller_pixel_object.touchpadfinger1._x + finger_x
+                self.controller_pixel_object.touchpadfinger1.y = self.controller_pixel_object.touchpadfinger1._y + finger_y
+            else:
+              if(self.touch0_down_autopy_mouse_location != None):
+                self.reset_touchpad_autopy_mouse()
+              
+            self.tk_root.update_idletasks()
+            self.tk_root.update()
+            time.sleep(0.001)
 
-                draw_progress_bar(0, 255, val, highlight_text)
+            #self.dualsense.light.setPulseOption(PulseOptions.FadeBlue)
 
-            #left analog stick
-            # 1: x-axis
-            dualsense.int_analog_stick_left_axis_x = d[1]
-            # 2: y-axis
-            dualsense.int_analog_stick_left_axis_x = d[2]
-            # right analog stick
-            # 3: x-axis
-            dualsense.int_analog_stick_left_axis_x = d[3]
-            # 4: y-axis
-            dualsense.int_analog_stick_left_axis_x = d[4]
+            #print(LedOptions.__dict__)
+            #print(PulseOptions.__dict__)
+            #self.label_text.set((self.state.trackPadTouch0.X))
 
-            dualsense.int_touchpad_y = d[36]
-
-            # triggers on the back
-            dualsense.int_trigger_l = d[5]
-            dualsense.int_trigger_l = d[6]
-
-            # cross square triangle circle d[8]
-            # bit true position of
-
-            #   8: 0b 0000100: nothing pressed
-            #  24: 0b 0001100: square
-            #  40: 0b 0010100: cross 
-            #  72: 0b 0100100: circle
-            # 136: 0b 1000100: triangle
-
-            #now we can use bitoperations bit shift
-            left_buttons_state = d[8]
-
-            dualsense.bool_d_square = (left_buttons_state & (1 << 3)) != 0
-            dualsense.bool_d_cross = (left_buttons_state & (1 << 4)) != 0
-            dualsense.bool_d_circle = (left_buttons_state & (1 << 5)) != 0
-            dualsense.bool_d_triangle = (left_buttons_state & (1 << 6)) != 0
-
-            dualsense.bool_touchpad = True if d[10] == 2 else False
-
-            if(d[9] == 1):
-                dualsense.bool_l1 = True
-            
-            if(d[9] == 2):
-                dualsense.bool_r1 = True
-            
-            if(d[9] == 3):
-                dualsense.bool_l1 = True
-                dualsense.bool_r1 = True
-            
-            if(dualsense.int_analog_stick_left_axis_x == 255):
-                break
-            
-
-    except KeyboardInterrupt:
+      except KeyboardInterrupt:
         pass
 
-    print("Closing the device")
-    h.close()
-
-except IOError as ex:
-    print(ex)
-    print("You probably don't have the hard-coded device.")
-    print("Update the h.open() line in this script with the one")
-    print("from the enumeration list output above and try again.")
-
-print("Done")
+  def odd_frame_ids(self, frame_ids):
+      return int(self.render_id/frame_ids)%2 == 0
 
 
 
 
+
+
+
+
+
+app = App()
