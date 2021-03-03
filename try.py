@@ -342,7 +342,7 @@ class Dualsense:
 
 
 def draw_progress_bar(min, max, value, highlight = False):
-    width = 80
+    width = max
     value_width = (value / max) * width
     ostr = ""
     # wtf c++ ... wtf -> 111/222 will return 0 , double(111)/222 will return 0.5... wtf
@@ -429,7 +429,7 @@ try:
 
     try:
         c = 0 
-        while c < 500:
+        while c < 5000:
             c= c+1
             print(c)
             time.sleep(0.1)
